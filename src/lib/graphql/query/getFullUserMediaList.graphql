@@ -33,6 +33,11 @@ query getFullUserMediaList($userName: String, $mediaId: Int, $version: Int) {
 			}
 			format
 			status(version: $version)
-		}
+    	episodes
+    	chapters
+    	nextAiringEpisode {
+      episode
+    }
+  }
 	}
 }

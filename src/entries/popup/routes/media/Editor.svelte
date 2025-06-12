@@ -27,6 +27,7 @@
 	let media;
 	let initialized = false;
 	let isSaving = false;
+	let maxProgress = 0;
 
 	$: currentId = entry?.id;
 	$: listId = entry?.mediaListEntry.id;
@@ -40,7 +41,7 @@
 			client,
 			query: GetFullUserMediaListDocument,
 			variables: { userName: name, mediaId: currentId },
-			requestPolicy: "network-only"
+			requestPolicy: "network-only",
 		});
 		initialized = false;
 	}
@@ -53,14 +54,14 @@
 	let rewatchCount = 0;
 	let notes = "";
 	let orig = {
-			status: "" as MediaListStatus | "",
-			score: 0,
-			progress: 0,
-			rewatchCount: 0,
-			notes: "",
-			startedAt: "",
-			CompletedAt: ""
-		}
+		status: "" as MediaListStatus | "",
+		score: 0,
+		progress: 0,
+		rewatchCount: 0,
+		notes: "",
+		startedAt: "",
+		CompletedAt: "",
+	};
 
 	$: if ($media.data?.MediaList && !initialized) {
 		status = $media.data?.MediaList.status || null;
@@ -69,7 +70,16 @@
 		rewatchCount = $media.data?.MediaList.repeat || 0;
 		notes = $media.data?.MediaList.notes || "";
 
-		let {day, month, year} = $media.data?.MediaList.startedAt ?? {};
+		if ($media.data?.MediaList.media.nextAiringEpisode?.episode) {
+			maxProgress = $media.data?.MediaList.media.nextAiringEpisode?.episode - 1;
+		} else {
+			maxProgress =
+				$media.data?.MediaList.media.episodes ||
+				$media.data?.MediaList.media.chapters ||
+				undefined;
+		}
+
+		let { day, month, year } = $media.data?.MediaList.startedAt ?? {};
 		if (day && month && year) {
 			startDate = `${year}-${fmt(month)}-${fmt(day)}`;
 		}
@@ -86,8 +96,8 @@
 			rewatchCount: rewatchCount,
 			notes: notes,
 			startedAt: startDate,
-			CompletedAt: finishDate
-		}
+			CompletedAt: finishDate,
+		};
 
 		initialized = true;
 	}
@@ -106,22 +116,24 @@
 	}
 
 	function parseISO(s: string): FuzzyDateInput | undefined {
-		if(!s) return undefined;
-		let [y,m,d] = s.split("-").map(Number);
-		return y && m && d ? {year: y, month: m, day: d} : undefined;
+		if (!s) return undefined;
+		let [y, m, d] = s.split("-").map(Number);
+		return y && m && d ? { year: y, month: m, day: d } : undefined;
 	}
 
-	function formatFuzzyDate(date?: { year?: number; month?: number; day?: number } | null): string {
-  	if (!date?.year || !date.month || !date.day) return "";
-  	const pad2 = (n: number) => `${n}`.padStart(2, "0");
-  	return `${date.year}-${pad2(date.month)}-${pad2(date.day)}`;
+	function formatFuzzyDate(
+		date?: { year?: number; month?: number; day?: number } | null
+	): string {
+		if (!date?.year || !date.month || !date.day) return "";
+		const pad2 = (n: number) => `${n}`.padStart(2, "0");
+		return `${date.year}-${pad2(date.month)}-${pad2(date.day)}`;
 	}
-	
+
 	async function save() {
 		try {
 			isSaving = true;
 
-			let {data, error} = await client.mutation(UpdateMediaListDocument, {
+			let { data, error } = await client.mutation(UpdateMediaListDocument, {
 				mediaId: currentId,
 				saveMediaListEntryId: listId,
 				progress: progress,
@@ -130,28 +142,26 @@
 				repeat: rewatchCount,
 				notes: notes,
 				completedAt: parseISO(finishDate),
-				startedAt: parseISO(startDate)
-			})
+				startedAt: parseISO(startDate),
+			});
 
-			if(!error) {
+			if (!error) {
 				getData();
-				console.log("Saved!")
-				dispatch("saved")
+				console.log("Saved!");
+				dispatch("saved");
 			} else {
-				console.log("Error saving!")
+				console.log("Error saving!");
 			}
 		} finally {
 			isSaving = false;
 		}
 	}
-
 </script>
 
-<div class="fixed -top-5 bottom-0 left-0 right-0 flex items-center justify-center">
-	<div
-		class="absolute inset-0 backdrop-blur-[10px]"
-		on:click={close}
-	/>
+<div
+	class="fixed -top-5 bottom-0 left-0 right-0 flex items-center justify-center"
+>
+	<div class="absolute inset-0 backdrop-blur-[10px]" on:click={close} />
 
 	<div
 		class="relative w-full max-w-5xl mx-4
@@ -251,6 +261,7 @@
 					<input
 						type="number"
 						min="0"
+						max={maxProgress}
 						bind:value={progress}
 						class="w-full px-3 py-2 bg-surface dark:bg-background border rounded text-text focus:ring-2 focus:ring-variable"
 					/>
@@ -299,7 +310,9 @@
 				/>
 			</div>
 			<div class="mt-6 flex justify-end space-x-2">
-				<Button type="INFO" on:click={save} disabled={!isDirty || isSaving}>{#if isSaving}Saving...{:else}Save{/if}</Button>
+				<Button type="INFO" on:click={save} disabled={!isDirty || isSaving}
+					>{#if isSaving}Saving...{:else}Save{/if}</Button
+				>
 				<Button type="ERROR" on:click={close}>Cancel</Button>
 			</div>
 		</div>
